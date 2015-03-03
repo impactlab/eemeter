@@ -140,23 +140,24 @@ class CDDBalancePointModel(ModelBase):
 
 def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
     """returns function which computes usage estimates in constant time
-    since GSOD temperatures only take discrete values (reference temperatures)
+    since GSOD temperatures only take discrete values
     can find CDD and HDD simply by precomputing them at those values
     and then adding a remainder term, which simply 
     the product of (distance to the reference temp) and (number of days above/below the balance point)
     
     TODO: adapt this for one-sided (CDD or HDD) models
     """
-    bp = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
     # expand by 1/scale because floats are funny
+    bp = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
     bp_cool_min = bounds[3][0]+bounds[4][0]-1.0/bp_scale
     bp_heat_max = bounds[3][1]+1.0/bp_scale
-    
     n_bp = len(bp)
     
+    # min and max daily temps for each interval
+    # used to avoid calculating cdd and hdd in intervals where there is none
+    # e.g. cooling in winter or heating in summer
     max_daily_temps = [np.max(temps) for temps in observed_daily_temps]
     min_daily_temps = [np.min(temps) for temps in observed_daily_temps]
-    
     n_periods = len(observed_daily_temps)
     
     shape = (n_bp, n_periods)
