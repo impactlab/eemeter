@@ -138,7 +138,7 @@ class CDDBalancePointModel(ModelBase):
             result.append(total)
         return result
 
-def precompute_usage_estimates(observed_daily_temps, bounds, ref_temp_scale):
+def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
     """returns function which computes usage estimates in constant time
     since GSOD temperatures only take discrete values (reference temperatures)
     can find CDD and HDD simply by precomputing them at those values
@@ -147,54 +147,52 @@ def precompute_usage_estimates(observed_daily_temps, bounds, ref_temp_scale):
     
     TODO: adapt this for one-sided (CDD or HDD) models
     """
-    ref_temp_min = bounds[3][0]
-    ref_temp_max = bounds[3][1]+bounds[4][1]
-    ref_temp_values = [t*1.0/ref_temp_scale for t in range(ref_temp_min*ref_temp_scale, ref_temp_max*ref_temp_scale+1)]
+    bp = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
+    # expand by 1/scale because floats are funny
+    bp_cool_min = bounds[3][0]+bounds[4][0]-1.0/bp_scale
+    bp_heat_max = bounds[3][1]+1.0/bp_scale
     
-    cdd = []; hdd = []
-    cdd_margin = []; hdd_margin = []
+    n_bp = len(bp)
     
     max_daily_temps = [np.max(temps) for temps in observed_daily_temps]
     min_daily_temps = [np.min(temps) for temps in observed_daily_temps]
     
     n_periods = len(observed_daily_temps)
     
-    for bp in ref_temp_values:
-        cdd_for_temp = np.zeros(n_periods); hdd_for_temp = np.zeros(n_periods)
-        cdd_margin_for_temp = np.zeros(n_periods); hdd_margin_for_temp = np.zeros(n_periods)
-        
-        for i,interval_daily_temps,max_daily_temp,min_daily_temp in \
-                zip(xrange(len(observed_daily_temps)),observed_daily_temps,max_daily_temps, min_daily_temps):
-            if bp >= bounds[3][0]+bounds[4][0] and bp < max_daily_temp:
-                c_array = np.maximum(interval_daily_temps - bp, 0)
-                cdd_for_temp[i] = np.sum(c_array)
-                cdd_margin_for_temp[i] = np.count_nonzero(c_array)
+    shape = (n_bp, n_periods)
+    cdd = np.zeros(shape); hdd = np.zeros(shape);
+    cdd_margin = np.zeros(shape); hdd_margin = np.zeros(shape);
+    
+    for i in xrange(n_bp):
+        for j in xrange(n_periods):
+            if bp[i] >= bp_cool_min and bp[i] < max_daily_temps[j]:
+                c_array = np.maximum(observed_daily_temps[j] - bp[i], 0)
+                cdd[i][j] = np.sum(c_array)
+                cdd_margin[i][j] = np.count_nonzero(c_array)
             
-            if bp <= bounds[3][1] and bp > min_daily_temp:
-                h_array = np.maximum(bp - interval_daily_temps, 0)
-                hdd_for_temp[i] = np.sum(h_array)
-                hdd_margin_for_temp[i] = np.count_nonzero(h_array)
-        
-        cdd.append(cdd_for_temp)
-        cdd_margin.append(cdd_margin_for_temp)
-        hdd.append(hdd_for_temp)
-        hdd_margin.append(hdd_margin_for_temp)
+            if bp[i] <= bp_heat_max and bp[i] > min_daily_temps[j]:
+                h_array = np.maximum(bp[i] - observed_daily_temps[j], 0)
+                hdd[i][j] = np.sum(h_array)
+                hdd_margin[i][j] = np.count_nonzero(h_array)
     
     n_days = np.array([len(temps) for temps in observed_daily_temps])
-            
+    min_index = bounds[3][0]*bp_scale-1
+    
+    def __index_and_value(bp, func):
+        r = func(bp*bp_scale)
+        index = int(r)-min_index
+        remainder = r/bp_scale
+        return index,remainder
+    
     def compute_usage_estimates(params):
         ts_low,ts_high,base_load,bp_low,bp_diff = params
         bp_high = bp_low + bp_diff
         
-        # sometimes optimize passes a float that is just above or below the range...
-        bp_high = max(ref_temp_min, min(bp_high,ref_temp_max))
-        bp_low = max(ref_temp_min, min(bp_low,ref_temp_max))
+        high_index,high_value = __index_and_value(bp_high, np.ceil)
+        low_index,low_value = __index_and_value(bp_low, np.floor)
         
-        high_index = int(np.ceil(bp_high*ref_temp_scale))-ref_temp_min*ref_temp_scale
-        low_index = int(np.floor(bp_low*ref_temp_scale))-ref_temp_min*ref_temp_scale
-        
-        high_remainder = np.ceil(bp_high*ref_temp_scale)/ref_temp_scale - bp_high
-        low_remainder = bp_low - np.floor(bp_low*ref_temp_scale)/ref_temp_scale
+        high_remainder = high_value - bp_high
+        low_remainder = bp_low - low_value
         
         cooling = (cdd[high_index] + high_remainder*cdd_margin[high_index])*ts_high
         heating = (hdd[low_index] + low_remainder*hdd_margin[low_index])*ts_low
