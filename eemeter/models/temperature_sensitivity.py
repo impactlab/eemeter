@@ -148,10 +148,10 @@ def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
     TODO: adapt this for one-sided (CDD or HDD) models
     """
     # expand by 1/scale because floats are funny
-    bp = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
+    bps = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
     bp_cool_min = bounds[3][0]+bounds[4][0]-1.0/bp_scale
     bp_heat_max = bounds[3][1]+1.0/bp_scale
-    n_bp = len(bp)
+    n_bps = len(bps)
     
     # min and max daily temps for each interval
     # used to avoid calculating cdd and hdd in intervals where there is none
@@ -160,43 +160,44 @@ def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
     min_daily_temps = [np.min(temps) for temps in observed_daily_temps]
     n_periods = len(observed_daily_temps)
     
-    shape = (n_bp, n_periods)
+    shape = (n_bps, n_periods)
     cdd = np.zeros(shape); hdd = np.zeros(shape);
     cdd_margin = np.zeros(shape); hdd_margin = np.zeros(shape);
     
-    for i in xrange(n_bp):
+    for i in xrange(n_bps):
         for j in xrange(n_periods):
-            if bp[i] >= bp_cool_min and bp[i] < max_daily_temps[j]:
-                c_array = np.maximum(observed_daily_temps[j] - bp[i], 0)
+            if bps[i] >= bp_cool_min and bps[i] < max_daily_temps[j]:
+                c_array = np.maximum(observed_daily_temps[j] - bps[i], 0)
                 cdd[i][j] = np.sum(c_array)
                 cdd_margin[i][j] = np.count_nonzero(c_array)
             
-            if bp[i] <= bp_heat_max and bp[i] > min_daily_temps[j]:
-                h_array = np.maximum(bp[i] - observed_daily_temps[j], 0)
+            if bps[i] <= bp_heat_max and bps[i] > min_daily_temps[j]:
+                h_array = np.maximum(bps[i] - observed_daily_temps[j], 0)
                 hdd[i][j] = np.sum(h_array)
                 hdd_margin[i][j] = np.count_nonzero(h_array)
     
     n_days = np.array([len(temps) for temps in observed_daily_temps])
     min_index = bounds[3][0]*bp_scale-1
     
-    def __index_and_value(bp, func):
-        r = func(bp*bp_scale)
+    def __cdd(bp):
+        r = np.ceil(bp*bp_scale)
         index = int(r)-min_index
-        remainder = r/bp_scale
-        return index,remainder
+        
+        remainder = r/bp_scale - bp
+        return (cdd[index] + remainder*cdd_margin[index])
+    
+    def __hdd(bp):
+        r = np.floor(bp*bp_scale)
+        index = int(r)-min_index
+        remainder = bp - r/bp_scale 
+        return (hdd[index] + remainder*hdd_margin[index])
     
     def compute_usage_estimates(params):
         ts_low,ts_high,base_load,bp_low,bp_diff = params
         bp_high = bp_low + bp_diff
         
-        high_index,high_value = __index_and_value(bp_high, np.ceil)
-        low_index,low_value = __index_and_value(bp_low, np.floor)
-        
-        high_remainder = high_value - bp_high
-        low_remainder = bp_low - low_value
-        
-        cooling = (cdd[high_index] + high_remainder*cdd_margin[high_index])*ts_high
-        heating = (hdd[low_index] + low_remainder*hdd_margin[low_index])*ts_low
+        cooling = __cdd(bp_high)*ts_high
+        heating = __hdd(bp_low)*ts_low
         base = n_days * base_load
         
         return (heating+cooling)+base
