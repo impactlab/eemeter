@@ -138,20 +138,35 @@ class CDDBalancePointModel(ModelBase):
             result.append(total)
         return result
 
+def memoize(f):
+    class memodict(dict):
+         __slots__ = ()
+         def __missing__(self, key):
+             self[key] = ret = f(key)
+             return ret
+    return memodict().__getitem__
+
+def memodict(f):
+    """ Memoization decorator for a function taking a single argument """
+    class memodict(dict):
+        def __missing__(self, key):
+            ret = self[key] = f(key)
+            return ret 
+    return memodict().__getitem__
+
 def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
-    """returns function which computes usage estimates in constant time
-    since GSOD temperatures only take discrete values
-    can find CDD and HDD simply by precomputing them at those values
-    and then adding a remainder term, which simply 
-    the product of (distance to the reference temp) and (number of days above/below the balance point)
+    """When observed_daily_temps only take values on a grid
+    we can *precisely* compute hdd and cdd at any temperature by computing on the grid and interpolating.
+    Here we  use memoization of those gridded calculations to optimize the calculation
+    
+    bp_scale is an integer representing the grid spacing of 1/bp_scale.
+    E.g. bp_scale = 2 means spacing of .5=1/2, bp_scale = 10 means spacing of .1, etc.
     
     TODO: adapt this for one-sided (CDD or HDD) models
     """
     # expand by 1/scale because floats are funny
-    bps = [t*1.0/bp_scale for t in range(bounds[3][0]*bp_scale-1, (bounds[3][1]+bounds[4][1])*bp_scale+2)]
     bp_cool_min = bounds[3][0]+bounds[4][0]-1.0/bp_scale
     bp_heat_max = bounds[3][1]+1.0/bp_scale
-    n_bps = len(bps)
     
     # min and max daily temps for each interval
     # used to avoid calculating cdd and hdd in intervals where there is none
@@ -160,37 +175,49 @@ def precompute_usage_estimates(observed_daily_temps, bounds, bp_scale):
     min_daily_temps = [np.min(temps) for temps in observed_daily_temps]
     n_periods = len(observed_daily_temps)
     
-    shape = (n_bps, n_periods)
-    cdd = np.zeros(shape); hdd = np.zeros(shape);
-    cdd_margin = np.zeros(shape); hdd_margin = np.zeros(shape);
-    
-    for i in xrange(n_bps):
-        for j in xrange(n_periods):
-            if bps[i] >= bp_cool_min and bps[i] < max_daily_temps[j]:
-                c_array = np.maximum(observed_daily_temps[j] - bps[i], 0)
-                cdd[i][j] = np.sum(c_array)
-                cdd_margin[i][j] = np.count_nonzero(c_array)
-            
-            if bps[i] <= bp_heat_max and bps[i] > min_daily_temps[j]:
-                h_array = np.maximum(bps[i] - observed_daily_temps[j], 0)
-                hdd[i][j] = np.sum(h_array)
-                hdd_margin[i][j] = np.count_nonzero(h_array)
-    
     n_days = np.array([len(temps) for temps in observed_daily_temps])
-    min_index = bounds[3][0]*bp_scale-1
+    
+    # for a given balance point returns two arrays
+    # hdd is an array of heated degree days for each period
+    # margin is the number of days in each period with tmperature >= bp
+    # intended to be called only for balance points on the grid
+    # but works for any balance point
+    @memoize
+    def __hdd_and_margin(bp):
+        hdd = np.zeros(n_periods)
+        margin = np.zeros(n_periods)
+        for j in xrange(n_periods):
+            if bp <= bp_heat_max and bp > min_daily_temps[j]:
+                h_array = np.maximum(bp - observed_daily_temps[j], 0)
+                hdd[j] = np.sum(h_array)
+                margin[j] = np.count_nonzero(h_array)
+        return hdd,margin
+    
+    # uses the hdd_and_margin to precisely calculate hdd at any point
+    # the interpolation is precise because it is assumed that observed_daily_temps
+    # fall only on the bp_scale grid
+    def __hdd(bp):
+        rounded = np.floor(bp*bp_scale)/bp_scale
+        remainder = bp - rounded
+        hdd,margin = __hdd_and_margin(rounded)
+        return hdd + remainder*margin
+    
+    @memoize
+    def __cdd_and_margin(bp):
+        cdd = np.zeros(n_periods)
+        margin = np.zeros(n_periods)
+        for j in xrange(n_periods):
+            if bp >= bp_cool_min and bp < max_daily_temps[j]:
+                c_array = np.maximum(observed_daily_temps[j] - bp, 0)
+                cdd[j] = np.sum(c_array)
+                margin[j] = np.count_nonzero(c_array)
+        return cdd,margin
     
     def __cdd(bp):
-        r = np.ceil(bp*bp_scale)
-        index = int(r)-min_index
-        
-        remainder = r/bp_scale - bp
-        return (cdd[index] + remainder*cdd_margin[index])
-    
-    def __hdd(bp):
-        r = np.floor(bp*bp_scale)
-        index = int(r)-min_index
-        remainder = bp - r/bp_scale 
-        return (hdd[index] + remainder*hdd_margin[index])
+        rounded = np.ceil(bp*bp_scale)/bp_scale
+        remainder = rounded - bp
+        cdd,margin = __cdd_and_margin(rounded)
+        return cdd + remainder*margin
     
     def compute_usage_estimates(params):
         ts_low,ts_high,base_load,bp_low,bp_diff = params
