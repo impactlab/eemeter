@@ -61,8 +61,13 @@ class TemperatureSensitivityParameterOptimizationMeter(MeterBase):
 
         # use nansum to ignore consumptions with missing usages
         daily_standard_error = np.nansum(np.abs(estimated_daily_usages - average_daily_usages))/sqrtn
+        
+        average_daily_usage = np.mean(average_daily_usages)
+        ss_residual = np.nansum( (estimated_daily_usages - average_daily_usages)**2 )
+        ss_total = np.nansum( (average_daily_usages - average_daily_usage)**2 )
+        R_squared = 1 - ss_residual / ss_total
 
-        return {"temp_sensitivity_params": params, "daily_standard_error":daily_standard_error}
+        return {"temp_sensitivity_params": params, "daily_standard_error":daily_standard_error, "R_squared": R_squared}
 
 class AnnualizedUsageMeter(MeterBase):
     """Weather normalizes modeled usage for an annualized estimate of

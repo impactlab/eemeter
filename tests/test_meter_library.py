@@ -31,6 +31,7 @@ from datetime import datetime
 from datetime import timedelta
 
 from numpy.testing import assert_allclose
+from numpy.ma.testutils import assert_close
 
 RTOL = 1e-2
 ATOL = 1e-2
@@ -74,6 +75,7 @@ def test_temperature_sensitivity_parameter_optimization(
                             weather_source=gsod_722880_2012_2014_weather_source)
 
     assert_allclose(result['temp_sensitivity_params'], params, rtol=RTOL, atol=ATOL)
+    assert_allclose(result['R_squared'], 1.0, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.slow
