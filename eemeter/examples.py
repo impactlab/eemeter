@@ -6,7 +6,7 @@ from eemeter.generator import generate_monthly_billing_datetimes
 from eemeter.consumption import ConsumptionData
 from eemeter.models import AverageDailyTemperatureSensitivityModel
 from eemeter.project import Project
-
+from eemeter.importers import import_green_button_xml
 from scipy.stats import randint
 
 from datetime import datetime
@@ -15,19 +15,13 @@ import pytz
 
 def get_example_project(zipcode):
 
-    return one_resi_example_project(zipcode,
+    return one_resi_gbutton_project(zipcode,
                                     baseline_start_dt=datetime(2011,1,1,tzinfo=pytz.utc),
                                     report_start_dt=datetime(2013,1,1,tzinfo=pytz.utc),
                                     report_end_dt=datetime(2015,1,1,tzinfo=pytz.utc)
                                     )
 
-def one_resi_example_project(zipcode, baseline_start_dt,
-                             report_start_dt, report_end_dt):
-
-    # location - optionally pass in lat_lng here
-    location = Location(zipcode=zipcode)
-    station = location.station
-    weather_source = GSODWeatherSource(station,baseline_start_dt.year,report_end_dt.year)
+def generate_consumptions(weather_source, period, reporting_period):
 
     # model
     model_e = AverageDailyTemperatureSensitivityModel(cooling=True, heating=True)
@@ -69,8 +63,6 @@ def one_resi_example_project(zipcode, baseline_start_dt,
     gen_g_r = MonthlyBillingConsumptionGenerator("natural_gas", "therm", "degF",
             model_g, params_g_r)
 
-    # time periods
-    period = Period(baseline_start_dt, report_end_dt)
     datetimes = generate_monthly_billing_datetimes(period, dist=randint(30,31))
 
     # consumption data - optionally pass in consumpton data here instead
@@ -79,10 +71,7 @@ def one_resi_example_project(zipcode, baseline_start_dt,
     cd_g_b = gen_g_b.generate(weather_source, datetimes, daily_noise_dist=None)
     cd_g_r = gen_g_r.generate(weather_source, datetimes, daily_noise_dist=None)
 
-    # periods
     periods = cd_e_b.periods()
-    reporting_period = Period(report_start_dt, report_end_dt)
-    baseline_period = Period(baseline_start_dt, report_start_dt)
 
     # records
     records_e = []
@@ -100,7 +89,31 @@ def one_resi_example_project(zipcode, baseline_start_dt,
             record_type="arbitrary")
     cd_g = ConsumptionData(records_g, "natural_gas", "therm",
             record_type="arbitrary")
-    consumptions = [cd_e, cd_g]
+
+    return [cd_e, cd_g]
+
+def one_resi_gbutton_project(zipcode, baseline_start_dt,
+                             report_start_dt, report_end_dt,
+                             gbutton_e=None, gbutton_g=None):
+
+    # location - optionally pass in lat_lng here
+    location = Location(zipcode=zipcode)
+    station = location.station
+    weather_source = GSODWeatherSource(station,baseline_start_dt.year,report_end_dt.year)
+
+    # time periods
+    period = Period(baseline_start_dt, report_end_dt)
+
+    # periods
+    reporting_period = Period(report_start_dt, report_end_dt)
+    baseline_period = Period(baseline_start_dt, report_start_dt)
+
+    if not (gbutton_e and gbutton_g):
+        consumptions = generate_consumptions(weather_source, period, reporting_period)
+    else:
+        cd_e = import_green_button_xml(gbutton_e)
+        cd_g = import_green_button_xml(gbutton_g)
+        consumptions = [cd_e, cd_g]
 
     # project
     project = Project(location, consumptions, baseline_period, reporting_period)
