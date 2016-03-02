@@ -15,10 +15,19 @@ import pytz
 
 def get_example_project(zipcode):
 
-    # location
+    return one_resi_example_project(zipcode,
+                                    baseline_start_dt=datetime(2011,1,1,tzinfo=pytz.utc),
+                                    report_start_dt=datetime(2013,1,1,tzinfo=pytz.utc),
+                                    report_end_dt=datetime(2015,1,1,tzinfo=pytz.utc)
+                                    )
+
+def one_resi_example_project(zipcode, baseline_start_dt,
+                             report_start_dt, report_end_dt):
+
+    # location - optionally pass in lat_lng here
     location = Location(zipcode=zipcode)
     station = location.station
-    weather_source = GSODWeatherSource(station,2011,2015)
+    weather_source = GSODWeatherSource(station,baseline_start_dt.year,report_end_dt.year)
 
     # model
     model_e = AverageDailyTemperatureSensitivityModel(cooling=True, heating=True)
@@ -61,10 +70,10 @@ def get_example_project(zipcode):
             model_g, params_g_r)
 
     # time periods
-    period = Period(datetime(2011,1,1,tzinfo=pytz.utc), datetime(2015,1,1,tzinfo=pytz.utc))
+    period = Period(baseline_start_dt, report_end_dt)
     datetimes = generate_monthly_billing_datetimes(period, dist=randint(30,31))
 
-    # consumption data
+    # consumption data - optionally pass in consumpton data here instead
     cd_e_b = gen_e_b.generate(weather_source, datetimes, daily_noise_dist=None)
     cd_e_r = gen_e_r.generate(weather_source, datetimes, daily_noise_dist=None)
     cd_g_b = gen_g_b.generate(weather_source, datetimes, daily_noise_dist=None)
@@ -72,8 +81,8 @@ def get_example_project(zipcode):
 
     # periods
     periods = cd_e_b.periods()
-    reporting_period = Period(datetime(2013,1,1,tzinfo=pytz.utc), datetime(2015,1,1,tzinfo=pytz.utc))
-    baseline_period = Period(datetime(2011,1,1,tzinfo=pytz.utc), datetime(2013,1,1,tzinfo=pytz.utc))
+    reporting_period = Period(report_start_dt, report_end_dt)
+    baseline_period = Period(baseline_start_dt, report_start_dt)
 
     # records
     records_e = []

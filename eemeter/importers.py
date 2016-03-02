@@ -98,6 +98,9 @@ def import_green_button_xml(filename):
         duration_s = int(time_period.xpath("*[local-name() = 'duration']")[0].text)
         end_s = start_s + duration_s
         end = datetime.fromtimestamp(end_s)
+        if end <= start:
+            # end of daylight savings time, so add an hour
+            end = datetime.fromtimestamp(end_s + 3600)
         return {"value": usage_kWh, "start": start, "end": end}
 
     records = []
