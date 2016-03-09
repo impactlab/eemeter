@@ -19,11 +19,12 @@ import requests
 class NOAAClient(object):
 
     def __init__(self, n_tries=3):
-        self.ftp = self._get_ftp_connection(n_tries)
-        self.station_index = self._load_station_index()
+        self.n_tries = n_tries
+        self.ftp = None # lazily load
+        self.station_index = None # lazily load
 
-    def _get_ftp_connection(self, n_tries=3):
-        for _ in range(n_tries):
+    def _get_ftp_connection(self):
+        for _ in range(self.n_tries):
             try:
                 ftp = ftplib.FTP("ftp.ncdc.noaa.gov")
                 ftp.login()
@@ -33,10 +34,13 @@ class NOAAClient(object):
         raise EOFError
 
     def _load_station_index(self):
-        with resource_stream('eemeter.resources','GSOD-ISD_station_index.json') as f:
+        with resource_stream('eemeter.resources', 'GSOD-ISD_station_index.json') as f:
             return json.loads(f.read().decode("utf-8"))
 
     def _get_potential_station_ids(self, station):
+        if self.station_index is None:
+            self.station_index = self._load_station_index()
+
         if len(station) == 6:
             potential_station_ids = self.station_index[station]
         else:
@@ -45,6 +49,9 @@ class NOAAClient(object):
 
     def _retreive_file_lines(self, filename_format, station, year):
         string = BytesIO()
+
+        if self.ftp is None:
+            self.ftp = self._get_ftp_connection()
 
         for station_id in self._get_potential_station_ids(station):
             filename = filename_format.format(station=station_id, year=year)
@@ -105,21 +112,27 @@ class NOAAClient(object):
 class TMY3Client(object):
 
     def __init__(self):
-        self.stations = self._load_stations()
-        self.station_to_lat_lng = self._load_station_locations()
+        self.stations = None # lazily load
+        self.station_to_lat_lng = None # lazily load
 
     def _load_stations(self):
-        with resource_stream('eemeter.resources','tmy3_stations.json') as f:
+        with resource_stream('eemeter.resources', 'tmy3_stations.json') as f:
             return json.loads(f.read().decode("utf-8"))
 
     def _load_station_locations(self):
         return _load_station_to_lat_lng_index()
 
     def _find_nearby_station(self, station):
+        if self.stations is None:
+            self.stations = self._load_stations()
+        if self.station_to_lat_lng is None:
+            self.station_to_lat_lng = self._load_station_locations()
+
         lat, lng = self.station_to_lat_lng[station]
         index_list = list(self.station_to_lat_lng.items())
         dists = [haversine(lat, lng, stat_lat, stat_lng)
                  for _, (stat_lat, stat_lng) in index_list]
+
         for dist, (nearby_station, _) in zip(dists, index_list):
             if nearby_station in self.stations:
                 warnings.warn("Using station {} instead".format(nearby_station))
@@ -127,6 +140,9 @@ class TMY3Client(object):
         return None
 
     def get_tmy3_data(self, station, station_fallback=True):
+
+        if self.stations is None:
+            self.stations = self._load_stations()
 
         if not station in self.stations:
             warnings.warn("Station {} is not a TMY3 station. See self.stations for a complete list.".format(station))
