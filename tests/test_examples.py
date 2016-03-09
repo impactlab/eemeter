@@ -1,5 +1,5 @@
-"""Throw-away code I'm writing just to facilitate learning eemeter,
-oeem-client and oeem-energy-datastore.
+"""Test to make sure that my changes to get_example_project do not break
+the instructions in eemeter.readthedocs.org.
 """
 from eemeter.examples import get_example_project, one_resi_gbutton_project
 from eemeter.meter import DefaultResidentialMeter

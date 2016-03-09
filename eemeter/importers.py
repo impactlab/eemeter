@@ -99,6 +99,8 @@ def import_green_button_xml(filename):
         end_s = start_s + duration_s
         end = datetime.fromtimestamp(end_s)
         if end <= start:
+            # quick hack to fix a possible failure to apply timezone to
+            # datetimes properly
             # end of daylight savings time, so add an hour
             end = datetime.fromtimestamp(end_s + 3600)
         return {"value": usage_kWh, "start": start, "end": end}
