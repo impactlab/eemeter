@@ -112,10 +112,9 @@ def one_resi_gbutton_project(zipcode, baseline_start_dt,
         consumptions = generate_consumptions(weather_source, period, reporting_period)
     else:
         cd_e = import_green_button_xml(gbutton_e)
+        print "fuel type for cd_e = %s, %s" % (cd_e.fuel_type, cd_e.unit_name)
         cd_g = import_green_button_xml(gbutton_g)
-        # temporary fix - go switch importer on ServiceCategory kind field, 1 = natural_gas
-        cd_g.fuel_type = "natural_gas"
-        cd_g.unit_name = "therm"
+        print "fuel type for cd_g = %s, %s" % (cd_g.fuel_type, cd_g.unit_name)
         consumptions = [cd_e, cd_g]
 
     # project

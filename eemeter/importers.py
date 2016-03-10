@@ -84,6 +84,14 @@ def import_green_button_xml(filename):
     out : eemeter.consumption.ConsumptionHistory
         Consumption history available for this project
     """
+
+    # https://naesb.org//copyright/espi.xsd
+    FUEL_TYPE_ELECTRICITY = '0'
+    FUEL_TYPE_NATURAL_GAS = '1'
+    FUEL_TYPES = {FUEL_TYPE_ELECTRICITY: ("electricity", "kWh"),
+                  FUEL_TYPE_NATURAL_GAS: ("natural_gas", "therm"),
+                 }
+
     with(open(filename,'r')) as f:
         tree = etree.parse(f)
 
@@ -110,8 +118,12 @@ def import_green_button_xml(filename):
         readings = block.xpath("*[local-name() = 'IntervalReading']")
         records.extend([get_record(reading) for reading in readings])
 
-    fuel_type = "electricity"
-    unit_str = "kWh"
+    service_cat = tree.xpath("//*[local-name() = 'ServiceCategory']")[0]
+    kind = service_cat.xpath("*[local-name() = 'kind']")[0].text
+    if kind not in FUEL_TYPES.keys():
+        message = "Unexpected Service Category kind of fuel in green button data: %s" % kind
+        raise ValueError
+    fuel_type, unit_str = FUEL_TYPES[kind]
     record_type = "arbitrary"
     consumption_data = ConsumptionData(records, fuel_type, unit_str,
             record_type)
