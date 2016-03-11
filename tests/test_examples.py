@@ -20,6 +20,12 @@ def test_existing_meter():
     natural_gas_usage_post = results.get_data("annualized_usage", ["natural_gas", "reporting"]).value
     electricity_savings = (electricity_usage_pre - electricity_usage_post) / electricity_usage_pre
     natural_gas_savings = (natural_gas_usage_pre - natural_gas_usage_post) / natural_gas_usage_pre
-    assert str(electricity_savings) == '[ 0.49999999]'
-    assert str(natural_gas_savings) == '[ 0.50000001]'
 
+    # assert str(electricity_savings) == '[ 0.49999999]'
+    # assert str(natural_gas_savings) == '[ 0.50000001]'
+    # Surprisingly, these results published in the docs actually reproduce exactly on my local dev
+    # but not on github in the automated tests, so round instead.  This "test" merely ensures
+    # that I have not broken the documented stepwise example instructions.
+
+    assert round(electricity_savings[0], 2) == 0.5
+    assert round(natural_gas_savings[0], 2) == 0.5
