@@ -112,6 +112,8 @@ def one_resi_gbutton_project(zipcode, baseline_start_dt,
         consumptions = generate_consumptions(weather_source, period, reporting_period)
     else:
         cd_e = import_green_button_xml(gbutton_e)
+        # since the resi meter cannot handle 15 min data, convert to day
+        cd_e.data = cd_e.data.resample('D')
         cd_g = import_green_button_xml(gbutton_g)
         consumptions = [cd_e, cd_g]
 

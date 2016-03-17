@@ -283,7 +283,8 @@ class WeatherSourceBase(object):
     def _period_daily_temperatures(self, period, unit):
         self._fetch_period(period)
         temps = []
-        for days in range(period.timedelta.days):
+        period_in_days = range(period.timedelta.days) or [-1]
+        for days in period_in_days:
             dt = period.start + timedelta(days=days)
             temps.append(self.datetime_average_temperature(dt, unit))
         return np.array(temps)
