@@ -46,7 +46,7 @@ Make sure you have the latest version:
 .. code-block:: python
 
     >>> import eemeter; eemeter.get_version()
-    '0.3.5'
+    '0.3.9'
 
 Using an existing meter
 -----------------------
@@ -70,8 +70,7 @@ First, some imports.
 All we'll need to get started is a project, which is an association building
 data, retrofit dates, and weather data.
 
-We can initialize a sample by passing in a zipcode. I've chosen zipcode in the
-San Fransisco Bay Area (Sunnyvale!):
+We can initialize a sample by passing in a zipcode, e.g.:
 
 .. code-block:: python
 
@@ -111,7 +110,7 @@ examine these results to obtain savings estimates.
     electricity_savings = (electricity_usage_pre - electricity_usage_post) / electricity_usage_pre
     natural_gas_savings = (natural_gas_usage_pre - natural_gas_usage_post) / natural_gas_usage_pre
 
-Now we can happily inspect our results!
+Now we can inspect our results:
 
 .. code-block:: python
 
@@ -119,6 +118,13 @@ Now we can happily inspect our results!
     0.50061411300996794
     >>> natural_gas_savings
     0.50139379943863116
+
+If you prefer, you can also look serialized json data from your meter run:
+
+.. code_block:: python
+
+    json_data = results.json()
+
 
 Loading consumption data
 ------------------------
@@ -185,36 +191,11 @@ specification (:ref:`eemeter-meter-default`).
 One benefit to using structured YAML for meter specification is that the
 meter specifications can be stored externally as readable text files.
 
-Caching Weather Data
+Weather Data Caching
 --------------------
 
-If you would like to cache weather data, please install :code:`sqlalchemy` and
-set the following environment variable, which must contain the credentials to
-a database you have set up for caching. If this variable is set properly, it
-will cache weather as it is pulled from various sources::
+In order to avoid putting an unnecessary load on external weather
+sources, weather data is cached by default using json in a directory
+`~/.eemeter/cache`. The location of the directory can be changed by setting::
 
-    export EEMETER_WEATHER_CACHE_DATABASE_URL=dbtype://username:password@host:port/dbname
-
-For additional information on the syntax of the url, please see sqlalchemy docs.
-
-Creating a Weather Source from WeatherSourceBase
-------------------------------------------------
-
-Occasionally, you may want to incorporate a weather source of your own. To do
-this, it is often easiest to extend the API by inheriting from the class
-:code:`eemeter.meter.WeatherSourceBase`. To do this, you need only define the
-method
-
-.. code-block:: python
-
-    class MyWeatherSource(WeatherSourceBase):
-
-        def get_internal_unit_daily_average_temperature(self,day):
-            # return the average temperature on the given day, according to
-            # your weather source. Use source units.
-
-If you are defining a weather normal source, add the `WeatherNormalMixin`.
-
-If you wish to take advantage of the caching mechanisms provided by `eemeter`,
-use a `CachedDataMixin`.
-
+    export EEMETER_WEATHER_CACHE_DIRECTORY=<full path to directory>
