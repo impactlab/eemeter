@@ -3,6 +3,7 @@ from eemeter.meter import DefaultResidentialMeter
 from eemeter.meter import DataCollection
 
 from datetime import datetime
+import argparse
 
 
 def run_my_greenbutton_data():
@@ -29,8 +30,32 @@ def run_my_greenbutton_data():
     print "electricity_savings: %s" % electricity_savings
     print "natural_gas_savings: %s" % natural_gas_savings
 
+def run_single_csv(gbcsv):
+    """Hard coded for Tracy.
+    """
+    myzip = "95304"
+    project = one_resi_gbutton_project(myzip,
+                                    baseline_start_dt=datetime(2013,6,1),
+                                    report_start_dt=datetime(2015,12,15),
+                                    report_end_dt=datetime(2016,3,1),
+                                    gbutton_e=gbcsv
+                                    )
+    meter = DefaultResidentialMeter()
+
+    results = meter.evaluate(DataCollection(project=project))
+    electricity_usage_pre = results.get_data("annualized_usage", ["electricity", "baseline"]).value
+    electricity_usage_post = results.get_data("annualized_usage", ["electricity", "reporting"]).value
+    electricity_savings = (electricity_usage_pre - electricity_usage_post) / electricity_usage_pre
+    print "electricity_savings: %s" % electricity_savings
+
 
 if __name__ == "__main__":
     """TBD: add options to specify the input file(s), zipcode and three dates.
     """
-    run_my_greenbutton_data()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('gbcsv', nargs='?', help='Name of a csv green button file. (optional)')
+    args = parser.parse_args()
+    if args.gbcsv:
+        run_single_csv(args.gbcsv)
+    else:
+        run_my_greenbutton_data()

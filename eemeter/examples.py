@@ -6,7 +6,7 @@ from eemeter.generator import generate_monthly_billing_datetimes
 from eemeter.consumption import ConsumptionData
 from eemeter.models import AverageDailyTemperatureSensitivityModel
 from eemeter.project import Project
-from eemeter.importers import import_green_button_xml
+from eemeter.importers import import_green_button_xml, import_csv
 from scipy.stats import randint
 
 from datetime import datetime
@@ -95,6 +95,8 @@ def generate_consumptions(weather_source, period, reporting_period):
 def one_resi_gbutton_project(zipcode, baseline_start_dt,
                              report_start_dt, report_end_dt,
                              gbutton_e=None, gbutton_g=None):
+    """Consume csv or xml data, or generate an example instead.
+    """
 
     # location - optionally pass in lat_lng here
     location = Location(zipcode=zipcode)
@@ -108,16 +110,25 @@ def one_resi_gbutton_project(zipcode, baseline_start_dt,
     reporting_period = Period(report_start_dt, report_end_dt)
     baseline_period = Period(baseline_start_dt, report_start_dt)
 
-    if not (gbutton_e and gbutton_g):
+    if not gbutton_e:
         consumptions = generate_consumptions(weather_source, period, reporting_period)
-    else:
+    elif gbutton_g:
         cd_e = import_green_button_xml(gbutton_e)
         # since the resi meter cannot handle 15 min data, convert to day
         cd_e.data = cd_e.data.resample('D').sum()
         cd_g = import_green_button_xml(gbutton_g)
         consumptions = [cd_e, cd_g]
+    else:
+        # we have electric but not gas
+        # brashly assume it is csv data since this is throw away code
+        cd_e = import_csv(gbutton_e)
+        # since the resi meter cannot handle 15 min data, convert to day
+        cd_e.data = cd_e.data.resample('D').sum()
+        consumptions = [cd_e]
 
     # project
     project = Project(location, consumptions, baseline_period, reporting_period)
 
     return project
+
+
