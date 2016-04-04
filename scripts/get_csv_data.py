@@ -87,19 +87,25 @@ class EemeterImporterCSV(GetDataSet):
     """Create a data set with a fixed subset of the columns from the
     assumed columns in the input file.
 
-    - Consumption: float
-    - UnitofMeasure: {"therms", "kWh"}
-    - FuelType: {"natural gas", "electricity"}
-    - StartDateTime: str (ISO 8601 combined date time)
-    - EndDateTime: str (ISO 8601 combined date time)
-    - ReadingType: {"actual", "estimated"}
+                project_id,start,end,fuel_type,unit_name,value,estimated
+
+    - project_id: str (basename of csv file here)
+    - start: str (ISO 8601 combined date time)
+    - end: str (ISO 8601 combined date time)
+    - fuel_type: {"natural gas", "electricity"}
+    - unit_name: {"therms", "kWh"}
+    - value: float
+    - estimated: boolean
     """
     def __init__(self, csv_filename, date_start=None, date_end=None):
         super(EemeterImporterCSV, self).__init__(csv_filename)
         self.fieldnames_in = ['Period', 'Consumption']
-        self.fieldnames_out = ['Consumption', 'UnitofMeasure', 'FuelType',
-                               'StartDateTime', 'EndDateTime', 'ReadingType']
-        self.new_csv_name = os.path.splitext(self.csv_filename)[0] + '-oee.csv'
+        self.fieldnames_out = ['project_id', 'start', 'end',
+                               'fuel_type', 'unit_name', 'value',
+                               'estimated']
+        csv_input = os.path.splitext(self.csv_filename)[0]
+        self.new_csv_name =  csv_input + '-api.csv'
+        self.project_id = os.path.basename(csv_input)
         self.new_csv = None
         self.get_rows = self.fixup_output_rows
         self.date_start = datetime.strptime(
@@ -120,15 +126,16 @@ class EemeterImporterCSV(GetDataSet):
     def fixup_output_rows(self):
         mins15 = timedelta(0, 900)
         out_constants = dict()
-        out_constants['UnitofMeasure'] = 'kWh'
-        out_constants['ReadingType'] = 'actual'
-        out_constants['FuelType'] = 'electricity'
+        out_constants['unit_name'] = 'kWh'
+        out_constants['estimated'] = 'False'
+        out_constants['fuel_type'] = 'electricity'
+        out_constants['project_id'] = self.project_id
         for row in self.get_csv_bits():
             out_row = out_constants.copy()
-            out_row['Consumption'] = row['Consumption']
+            out_row['value'] = row['Consumption']
             end_time = datetime.strptime(row['Period'], "%m/%d/%Y %I:%M %p")
-            out_row['EndDateTime'] = str(end_time)
-            out_row['StartDateTime'] = str(end_time - mins15)
+            out_row['end'] = str(end_time)
+            out_row['start'] = str(end_time - mins15)
             yield out_row
 
 
