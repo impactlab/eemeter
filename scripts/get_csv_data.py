@@ -83,9 +83,9 @@ class GetDataSet(object):
                 writer.writerow(row)
 
 
-class EemeterImporterCSV(GetDataSet):
-    """Create a data set with a fixed subset of the columns from the
-    assumed columns in the input file.
+class EemeterUploaderCSV(GetDataSet):
+    """Create a data set with the expected fields given only the
+    Period and Consumption as inputs.
 
                 project_id,start,end,fuel_type,unit_name,value,estimated
 
@@ -98,7 +98,7 @@ class EemeterImporterCSV(GetDataSet):
     - estimated: boolean
     """
     def __init__(self, csv_filename, date_start=None, date_end=None):
-        super(EemeterImporterCSV, self).__init__(csv_filename)
+        super(EemeterUploaderCSV, self).__init__(csv_filename)
         self.fieldnames_in = ['Period', 'Consumption']
         self.fieldnames_out = ['project_id', 'start', 'end',
                                'fuel_type', 'unit_name', 'value',
@@ -116,7 +116,7 @@ class EemeterImporterCSV(GetDataSet):
     def keep_me(self, row):
         """Could be slightly different.
         """
-        if super(EemeterImporterCSV, self).keep_me(row):
+        if super(EemeterUploaderCSV, self).keep_me(row):
             # so far so good
             # but 'Period' a datetime? and the 'Consumption' a float?
             # if Period is a datetime, is it outside of the given date range?
@@ -139,46 +139,42 @@ class EemeterImporterCSV(GetDataSet):
             yield out_row
 
 
-
-
-class DatastoreUploaderCSV(GetDataSet):
-    """Create a data set with a fixed subset of the columns from the
-    assumed columns in the input file.
-
-    - end: str (ISO 8601 combined date time)
-    - fuel_type: {"natural gas", "electricity"}
-    - project_id: string
-    - start: str (ISO 8601 combined date time)
-    - unit_name: {"therms", "kWh"}
-    - value: float
-
+class GreenButtonUploadCSV(GetDataSet):
+    """Convert PGE green button data downloaded as a csv into
+    the format expected by eemeter.uploader.api.upload_csvs.
     """
-    def __init__(self, csv_filename):
-        super(DatastoreUploaderCSV, self).__init__(csv_filename)
-        # would be better to read in 'Period' and one or more columns
-        # taking the project_ids from the headers in those columns
-        self.fieldnames_in = ['Period', '8189246983-tracy', '5553847436-eureka',
-                              '4590556115-richmond']
-        self.fieldnames_out = ['end', 'fuel_type', 'project_id',
-                               'start', 'unit_name', 'value']
-        self.new_csv_name = os.path.splitext(self.csv_filename)[0] + '-ds.csv'
-        self.new_csv = None
-        self.get_rows = self.triple_output_rows
 
-    def triple_output_rows(self):
-        mins15 = timedelta(0, 900)
+    def __init__(self, csv_filename):
+        super(GreenButtonUploadCSV, self).__init__(csv_filename)
+        self.fieldnames_in = ['TYPE', 'DATE', 'START TIME', 'END TIME',
+                              'USAGE', 'UNITS', 'COST']
+        self.fieldnames_out = ['project_id', 'start', 'end',
+                               'fuel_type', 'unit_name', 'value',
+                               'estimated']
+        csv_input = os.path.splitext(self.csv_filename)[0]
+        self.new_csv_name =  csv_input + '-api.csv'
+        self.project_id = os.path.basename(csv_input)
+        self.new_csv = None
+        self.get_rows = self.fixup_datetimes
+
+    def fixup_datetimes(self):
         out_constants = dict()
         out_constants['unit_name'] = 'kWh'
+        out_constants['estimated'] = 'False'
         out_constants['fuel_type'] = 'electricity'
+        out_constants['project_id'] = self.project_id
         for row in self.get_csv_bits():
-            for project_id in self.fieldnames_in[-3:]:
-                out_row = out_constants.copy()
-                out_row['project_id'] = project_id
-                end_time = datetime.strptime(row['Period'], "%m/%d/%Y %I:%M %p")
-                out_row['end'] = str(end_time)
-                out_row['start'] = str(end_time - mins15)
-                out_row['value'] = row[project_id]
-                yield out_row
+            out_row = out_constants.copy()
+            out_row['value'] = row['USAGE']
+            start = '%s %s' % (row['DATE'], row['START TIME'])
+            start_time = datetime.strptime(start, "%m/%d/%y %H:%M")
+            end = '%s %s' % (row['DATE'], row['END TIME'])
+            end_time = datetime.strptime(end, "%m/%d/%y %H:%M")
+            out_row['end'] = str(end_time)
+            out_row['start'] = str(start_time)
+            yield out_row
+
+
 
 
 def main():
@@ -198,17 +194,17 @@ def main():
         help='The name of the input csv file containing consumption data.',
     )
     parser.add_argument(
-        '-d',
-        '--datastore',
+        '-g',
+        '--greenbutton',
         action="store_true",
-        help='Produce datastore upload format instead of core meter.'
+        help='Input is a greenbutton csv instead of simple time/value data.'
     )
     # add option for different interval length, default 15 mins
     args = parser.parse_args()
-    if args.datastore:
-        interval_data = DatastoreUploaderCSV(args.csv_filename)
+    if args.greenbutton:
+        interval_data = GreenButtonUploadCSV(args.csv_filename)
     else:
-        interval_data = EemeterImporterCSV(args.csv_filename, args.start_date, args.end_date)
+        interval_data = EemeterUploaderCSV(args.csv_filename, args.start_date, args.end_date)
     interval_data.read_and_write_each_row()
 
 if __name__ == '__main__':
