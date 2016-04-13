@@ -124,7 +124,7 @@ class EemeterUploaderCSV(GetDataSet):
             return True
 
     def fixup_output_rows(self):
-        mins15 = timedelta(0, 900)
+        day = timedelta(days=1, minutes=-1)
         out_constants = dict()
         out_constants['unit_name'] = 'kWh'
         out_constants['estimated'] = 'False'
@@ -133,9 +133,9 @@ class EemeterUploaderCSV(GetDataSet):
         for row in self.get_csv_bits():
             out_row = out_constants.copy()
             out_row['value'] = row['Consumption']
-            end_time = datetime.strptime(row['Period'], "%m/%d/%Y %I:%M %p")
-            out_row['end'] = str(end_time)
-            out_row['start'] = str(end_time - mins15)
+            start_time = datetime.strptime(row['Period'], "%d-%b-%y")
+            out_row['end'] = str(start_time + day)
+            out_row['start'] = str(start_time)
             yield out_row
 
 
