@@ -124,7 +124,7 @@ class EemeterUploaderCSV(GetDataSet):
             return True
 
     def fixup_output_rows(self):
-        day = timedelta(days=1, minutes=-1)
+        day = timedelta(days=1)
         out_constants = dict()
         out_constants['unit_name'] = 'kWh'
         out_constants['estimated'] = 'False'
