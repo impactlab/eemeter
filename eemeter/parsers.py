@@ -758,6 +758,7 @@ class ESPIUsageParser(object):
             Consumption data grouped by fuel type.
         '''
         # Get all consumption records, group by fuel type.
+
         fuel_type_records = defaultdict(list)
         for record in self.get_consumption_records():
             fuel_type_records[record["fuel_type"]].append(record)

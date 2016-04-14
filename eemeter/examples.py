@@ -8,7 +8,7 @@ from eemeter.models import AverageDailyTemperatureSensitivityModel
 from eemeter.project import Project
 from eemeter.importers import import_green_button_xml, import_csv
 from scipy.stats import randint
-
+from eemeter.parsers import ESPIUsageParser
 from datetime import datetime
 import pytz
 
@@ -113,11 +113,14 @@ def one_resi_gbutton_project(zipcode, baseline_start_dt,
     if not gbutton_e:
         consumptions = generate_consumptions(weather_source, period, reporting_period)
     elif gbutton_g:
-        cd_e = import_green_button_xml(gbutton_e)
-        # since the resi meter cannot handle 15 min data, convert to day
-        cd_e.data = cd_e.data.resample('D').sum()
-        cd_g = import_green_button_xml(gbutton_g)
-        consumptions = [cd_e, cd_g]
+        parser = ESPIUsageParser(gbutton_e)
+        for cd_e in parser.get_consumption_data_objects():
+            print "got one ", type(cd_e)
+        parser = ESPIUsageParser(gbutton_g)
+        for cd_g in parser.get_consumption_data_objects():
+            print "got one", type(cd_g)
+        # consumptions = [cd_e, cd_g]
+        consumptions = [cd_e]
     else:
         # we have electric but not gas
         # brashly assume it is csv data since this is throw away code
