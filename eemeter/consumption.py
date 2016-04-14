@@ -384,7 +384,11 @@ class ConsumptionData(object):
             raise ValueError
 
         # convert units, as necessary
-        self.data *= multiplier
+        # self.data *= multiplier
+        self.data *= int(multiplier)
+        # avoid this error, though maybe the multiplier sometimes is
+        # actually not an integer?  Not for my test case though.
+        # TypeError: can't multiply sequence by non-int of type 'float'
 
     def _import_interval(self, records):
         if records == []:
