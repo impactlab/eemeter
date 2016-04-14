@@ -128,10 +128,18 @@ class TMY3Client(object):
         if self.station_to_lat_lng is None:
             self.station_to_lat_lng = self._load_station_locations()
 
-        lat, lng = self.station_to_lat_lng[station]
-        index_list = list(self.station_to_lat_lng.items())
-        dists = [haversine(lat, lng, stat_lat, stat_lng)
-                 for _, (stat_lat, stat_lng) in index_list]
+        try:
+            lat, lng = self.station_to_lat_lng[station]
+        except KeyError:
+            warnings.warn(
+                "Could not locate station {}; "
+                "nearby station look-up failed".format(station)
+            )
+            return None
+        else:
+            index_list = list(self.station_to_lat_lng.items())
+            dists = [haversine(lat, lng, stat_lat, stat_lng)
+                     for _, (stat_lat, stat_lng) in index_list]
 
         for dist, (nearby_station, _) in zip(dists, index_list):
             if nearby_station in self.stations:
@@ -145,11 +153,17 @@ class TMY3Client(object):
             self.stations = self._load_stations()
 
         if not station in self.stations:
-            warnings.warn("Station {} is not a TMY3 station. See self.stations for a complete list.".format(station))
+            warnings.warn(
+                "Station {} is not a TMY3 station. "
+                "See self.stations for a complete list.".format(station)
+                )
             if station_fallback:
                 station = self._find_nearby_station(station)
             else:
-                return None
+                station = None
+
+        if station is None:
+            return None
 
         url = "http://rredc.nrel.gov/solar/old_data/nsrdb/1991-2005/data/tmy3/{}TYA.CSV".format(station)
         r = requests.get(url)
@@ -176,7 +190,7 @@ class WeatherSourceBase(object):
 
     def __init__(self, station):
         self.station = station
-        self.tempC = pd.Series()
+        self.tempC = pd.Series(dtype=float)
 
     @staticmethod
     def _unit_convert(x, unit):
@@ -522,11 +536,14 @@ class CachedWeatherSourceBase(WeatherSourceBase):
                 data = json.load(f)
         except IOError:
             return
+        except ValueError: # Corrupted json file
+            self.clear_cache()
+            return
         index = pd.to_datetime([d[0] for d in data], format=self.cache_date_format)
         values = [d[1] for d in data]
 
         # changed for pandas > 0.18
-        self.tempC = pd.Series(values, index=index).sort_index().resample(self.freq).mean()
+        self.tempC = pd.Series(values, index=index, dtype=float).sort_index().resample(self.freq).mean()
 
     def clear_cache(self):
         try:
@@ -624,7 +641,7 @@ class GSODWeatherSource(NOAAWeatherSourceBase):
 
         data = self.client.get_gsod_data(self.station, year)
         dates = pd.date_range("{}-01-01".format(year),"{}-12-31".format(year), freq=self.freq)
-        new_series = pd.Series(None, index=dates)
+        new_series = pd.Series(None, index=dates, dtype=float)
         for day in data:
             if not pd.isnull(day["temp_C"]):
                 new_series[day["date"]] = day["temp_C"]
@@ -654,7 +671,7 @@ class ISDWeatherSource(NOAAWeatherSourceBase):
 
         data = self.client.get_isd_data(self.station, year)
         dates = pd.date_range("{}-01-01 00:00".format(year),"{}-01-01 00:00".format(int(year) + 1), freq='H')[:-1]
-        new_series = pd.Series(None, index=dates)
+        new_series = pd.Series(None, index=dates, dtype=float)
         for hour in data:
             if not pd.isnull(hour["temp_C"]):
                 dt = hour["datetime"]
@@ -681,11 +698,15 @@ class TMY3WeatherSource(CachedWeatherSourceBase):
 
     def _load_data(self):
         data = self.client.get_tmy3_data(self.station, self.station_fallback)
-        temps = [d["temp_C"] for d in data]
-        index = [datetime(1900, d["dt"].month, d["dt"].day, d["dt"].hour) for d in data]
+        if data is None:
+            temps = [np.nan for _ in range(365 * 24)]
+            index = [datetime(1900, 1, 1) + timedelta(seconds=i*3600) for i in range(365 * 24)]
+        else:
+            temps = [d["temp_C"] for d in data]
+            index = [datetime(1900, d["dt"].month, d["dt"].day, d["dt"].hour) for d in data]
 
         # changed for pandas > 0.18
-        self.tempC = pd.Series(temps, index).sort_index().resample('H').mean()
+        self.tempC = pd.Series(temps, index=index, dtype=float).sort_index().resample('H').mean()
         self.save_to_cache()
 
     def annual_daily_temperatures(self, unit):

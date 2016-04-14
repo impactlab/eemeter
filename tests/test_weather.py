@@ -142,6 +142,10 @@ def test_tmy3_weather_source(periods, tmy3_weather_source):
     cdds = tmy3_weather_source.cdd(periods,"degC",18.33)
     assert_allclose(cdds, [58.63,138.775,160.433], rtol=RTOL,atol=ATOL)
 
+def test_tmy3_weather_source_null():
+    ws = TMY3WeatherSource("INVALID")
+    assert_allclose(ws.tempC.values, np.zeros((365*24,)) * np.nan)
+
 @pytest.mark.slow
 def test_cache():
     cache_dir = tempfile.mkdtemp()
@@ -166,7 +170,14 @@ def test_cache():
     ws = GSODWeatherSource('722880', cache_directory=cache_dir)
     assert ws.tempC.shape == (365*3,)
 
-    ws.clear_cache()
+    # corrupt the cache
+    with open(ws.cache_filename, 'w') as f:
+        f.seek(1000)
+        f.write("0#2]]]],,,sd,f,\\sf\\f\s34")
+
+    # shouldn't fail - should just clear the cache
+    ws = GSODWeatherSource('722880', cache_directory=cache_dir)
+    assert ws.tempC.shape == (0,)
 
     # new instance, loaded from empty cache
     ws = GSODWeatherSource('722880', cache_directory=cache_dir)
@@ -177,3 +188,12 @@ def test_cache():
     ws.load_from_cache()
 
     assert ws.tempC.shape == (0,)
+
+    # write an all-null cache file
+    with open(ws.cache_filename, 'w') as f:
+        f.write('[["20110101", null]]')
+
+    # new instance, loaded from empty cache
+    ws = GSODWeatherSource('722880', cache_directory=cache_dir)
+
+    assert ws.tempC.shape == (1,)
